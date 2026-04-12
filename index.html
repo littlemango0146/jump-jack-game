@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>開合跳挑戰 - Jump Jack Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'PingFang TC', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        /* 遊戲容器 */
+        .game-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        /* 開始畫面 */
+        .start-screen {
+            text-align: center;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .game-title {
+            font-size: 3.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #00d9ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1rem;
+            text-shadow: 0 0 30px rgba(0, 217, 255, 0.3);
+        }
+
+        .game-subtitle {
+            font-size: 1.2rem;
+            color: #a0a0a0;
+            margin-bottom: 3rem;
+        }
+
+        /* 關卡選擇 */
+        .level-select {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            margin-bottom: 2rem;
+        }
+
+        .level-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 1.5rem 2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 160px;
+        }
+
+        .level-card:hover {
+            transform: translateY(-5px);
+            border-color: #00d9ff;
+            box-shadow: 0 10px 40px rgba(0, 217, 255, 0.2);
+        }
+
+        .level-card.selected {
+            border-color: #00ff88;
+            background: rgba(0, 255, 136, 0.1);
+        }
+
+        .level-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #00d9ff;
+        }
+
+        .level-card.selected .level-number {
+            color: #00ff88;
+        }
+
+        .level-target {
+            font-size: 0.9rem;
+            color: #888;
+            margin-top: 0.5rem;
+        }
+
+        /* 開始按鈕 */
+        .start-btn {
+            background: linear-gradient(135deg, #00d9ff, #00ff88);
+            color: #1a1a2e;
+            font-size: 1.3rem;
+            font-weight: 700;
+            padding: 1rem 3rem;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 1rem;
+        }
+
+        .start-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 40px rgba(0, 255, 136, 0.4);
+        }
+
+        /* 遊戲畫面 */
+        .game-screen {
+            display: none;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .game-screen.active {
+            display: block;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        /* 頂部狀態欄 */
+        .game-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 2rem;
+            background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
+            z-index: 10;
+        }
+
+        .game-info {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .info-box {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 0.5rem 1.2rem;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .info-label {
+            font-size: 0.75rem;
+            color: #a0a0a0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .info-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #00d9ff;
+        }
+
+        .info-value.timer {
+            color: #ff6b6b;
+        }
+
+        .info-value.score {
+            color: #00ff88;
+        }
+
+        /* 進度條 */
+        .progress-bar {
+            width: 200px;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            transition: width 0.3s ease;
+        }
+
+        /* 攝像頭區域 */
+        .camera-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #0a0a1a;
+        }
+
+        #videoElement, #canvasElement {
+            max-width: 100%;
+            max-height: 100%;
+            transform: scaleX(-1);
+        }
+
+        /* 骨骼疊加Canvas */
+        #canvasElement {
+            position: absolute;
+            pointer-events: none;
+        }
+
+        /* 姿態狀態指示 */
+        .pose-indicator {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 1rem 2rem;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            z-index: 10;
+        }
+
+        .pose-icon {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            transition: all 0.2s ease;
+        }
+
+        .pose-icon.active {
+            background: #00ff88;
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+        }
+
+        .pose-text {
+            font-size: 1rem;
+            color: #a0a0a0;
+        }
+
+        .pose-text.active {
+            color: #00ff88;
+        }
+
+        /* +1 飄字動畫 */
+        .score-popup {
+            position: absolute;
+            font-size: 3rem;
+            font-weight: 800;
+            color: #00ff88;
+            text-shadow: 0 0 20px rgba(0, 255, 136, 0.8);
+            animation: scorePopup 1s ease-out forwards;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        @keyframes scorePopup {
+            0% {
+                opacity: 1;
+                transform: translateY(0) scale(0.5);
+            }
+            50% {
+                opacity: 1;
+                transform: translateY(-50px) scale(1.2);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-100px) scale(1);
+            }
+        }
+
+        /* 結算畫面 */
+        .result-screen {
+            display: none;
+            text-align: center;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .result-screen.active {
+            display: block;
+        }
+
+        .result-icon {
+            font-size: 6rem;
+            margin-bottom: 1rem;
+        }
+
+        .result-title {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+        }
+
+        .result-title.success {
+            color: #00ff88;
+        }
+
+        .result-title.fail {
+            color: #ff6b6b;
+        }
+
+        .result-stats {
+            display: flex;
+            gap: 2rem;
+            justify-content: center;
+            margin: 2rem 0;
+        }
+
+        .stat-box {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1.5rem 2rem;
+            border-radius: 16px;
+            min-width: 120px;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #00d9ff;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: #888;
+            margin-top: 0.3rem;
+        }
+
+        .result-btn {
+            background: linear-gradient(135deg, #00d9ff, #00ff88);
+            color: #1a1a2e;
+            font-size: 1.1rem;
+            font-weight: 700;
+            padding: 0.8rem 2.5rem;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 0.5rem;
+        }
+
+        .result-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(0, 255, 136, 0.3);
+        }
+
+        .result-btn.secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        /* 提示訊息 */
+        .hint-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            font-size: 1.2rem;
+            color: #ffcc00;
+            z-index: 20;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* 動畫 */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 載入中 */
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(26, 26, 46, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .loading.hidden {
+            display: none;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(0, 217, 255, 0.2);
+            border-top-color: #00d9ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            margin-top: 1rem;
+            font-size: 1.1rem;
+            color: #a0a0a0;
+        }
+
+        /* 錯誤提示 */
+        .error-message {
+            background: rgba(255, 107, 107, 0.2);
+            border: 1px solid #ff6b6b;
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            margin: 1rem 0;
+            max-width: 400px;
+        }
+
+        /* 返回按鈕 */
+        .back-btn {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #fff;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            z-index: 20;
+            transition: all 0.3s ease;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* 全身提示 */
+        .full-body-hint {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 2rem 3rem;
+            border-radius: 20px;
+            text-align: center;
+            z-index: 20;
+        }
+
+        .full-body-hint .emoji {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        .full-body-hint p {
+            font-size: 1.2rem;
+            color: #ffcc00;
+        }
+    </style>
+</head>
+<body>
+    <!-- 載入畫面 -->
+    <div class="loading" id="loadingScreen">
+        <div class="loading-spinner"></div>
+        <p class="loading-text">載入姿態檢測模型中...</p>
+    </div>
+
+    <div class="game-container">
+        <!-- 開始畫面 -->
+        <div class="start-screen" id="startScreen">
+            <h1 class="game-title">開合跳挑戰</h1>
+            <p class="game-subtitle">使用身體姿勢控制，挑戰你的极限！</p>
+            
+            <div class="level-select">
+                <div class="level-card selected" data-level="1">
+                    <div class="level-number">第1關</div>
+                    <div class="level-target">60秒 / 15次</div>
+                </div>
+                <div class="level-card" data-level="2">
+                    <div class="level-number">第2關</div>
+                    <div class="level-target">60秒 / 20次</div>
+                </div>
+                <div class="level-card" data-level="3">
+                    <div class="level-number">第3關</div>
+                    <div class="level-target">60秒 / 25次</div>
+                </div>
+            </div>
+
+            <button class="start-btn" id="startGameBtn">開始挑戰</button>
+            <div id="errorContainer"></div>
+        </div>
+
+        <!-- 遊戲畫面 -->
+        <div class="game-screen" id="gameScreen">
+            <button class="back-btn" id="backBtn">← 返回</button>
+            
+            <div class="game-header">
+                <div class="game-info">
+                    <div class="info-box">
+                        <div class="info-label">關卡</div>
+                        <div class="info-value" id="levelDisplay">1</div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-label">剩餘時間</div>
+                        <div class="info-value timer" id="timerDisplay">60</div>
+                    </div>
+                </div>
+                <div class="game-info">
+                    <div class="info-box">
+                        <div class="info-label">分數</div>
+                        <div class="info-value score" id="scoreDisplay">0</div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-label">目標</div>
+                        <div class="info-value" id="targetDisplay">15</div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="camera-container" id="cameraContainer">
+                <video id="videoElement" autoplay playsinline></video>
+                <canvas id="canvasElement"></canvas>
+            </div>
+
+            <div id="hintContainer"></div>
+
+            <div class="pose-indicator" id="poseIndicator">
+                <div class="pose-icon" id="poseIcon">🙌</div>
+                <div class="pose-text" id="poseText">準備中...</div>
+            </div>
+        </div>
+
+        <!-- 結算畫面 -->
+        <div class="result-screen" id="resultScreen">
+            <div class="result-icon" id="resultIcon">🎉</div>
+            <h2 class="result-title" id="resultTitle">恭喜通關！</h2>
+            <div class="result-stats">
+                <div class="stat-box">
+                    <div class="stat-value" id="finalScore">0</div>
+                    <div class="stat-label">完成次數</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="finalTarget">15</div>
+                    <div class="stat-label">目標次數</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="finalTime">60</div>
+                    <div class="stat-label">剩餘秒數</div>
+                </div>
+            </div>
+            <div>
+                <button class="result-btn" id="retryBtn">再試一次</button>
+                <button class="result-btn secondary" id="menuBtn">返回選單</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MediaPipe Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+
+    <script>
+        // ==================== 遊戲配置 ====================
+        const LEVELS = {
+            1: { target: 15, time: 60 },
+            2: { target: 20, time: 60 },
+            3: { target: 25, time: 60 }
+        };
+
+        // ==================== 關鍵點索引 ====================
+        const LANDMARKS = {
+            NOSE: 0,
+            LEFT_SHOULDER: 11,
+            RIGHT_SHOULDER: 12,
+            LEFT_ELBOW: 13,
+            RIGHT_ELBOW: 14,
+            LEFT_WRIST: 15,
+            RIGHT_WRIST: 16,
+            LEFT_HIP: 23,
+            RIGHT_HIP: 24,
+            LEFT_KNEE: 25,
+            RIGHT_KNEE: 26,
+            LEFT_ANKLE: 27,
+            RIGHT_ANKLE: 28
+        };
+
+        // ==================== 遊戲狀態 ====================
+        const GameState = {
+            POSE_DETECTING: 'detecting',  // 準備姿態檢測
+            COUNTDOWN: 'countdown',        // 倒數
+            PLAYING: 'playing',            // 遊戲中
+            PAUSED: 'paused',              // 暫停
+            ENDED: 'ended'                 // 結束
+        };
+
+        // ==================== 姿態狀態（開合跳狀態機）====================
+        const PoseState = {
+            IDLE: 'idle',      // 預備姿勢（雙手放下，雙腳併攏）
+            OPEN: 'open',      // 開（雙手舉起，雙腳分開）
+            CLOSED: 'closed'   // 合（回到預備姿勢，計數）
+        };
+
+        // ==================== 全域變量 ====================
+        let pose;
+        let camera;
+        let videoElement;
+        let canvasElement;
+        let canvasCtx;
+
+        // 遊戲狀態
+        let currentLevel = 1;
+        let gameState = GameState.POSE_DETECTING;
+        let poseState = PoseState.IDLE;
+        let score = 0;
+        let timeLeft = 60;
+        let timerInterval = null;
+
+        // 姿態檢測穩定性
+        let poseFrameCount = {
+            idle: 0,
+            open: 0,
+            closed: 0
+        };
+        const POSE_CONFIRM_FRAMES = 3; // 需要連續3幀確認姿態
+
+        // 全身檢測
+        let fullBodyDetected = false;
+        let lastDetectionTime = 0;
+
+        // ==================== 初始化 ====================
+        async function init() {
+            videoElement = document.getElementById('videoElement');
+            canvasElement = document.getElementById('canvasElement');
+            canvasCtx = canvasElement.getContext('2d');
+
+            // 初始化 MediaPipe Pose
+            pose = new Pose({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+                }
+            });
+
+            pose.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                enableSegmentation: false,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            pose.onResults(onPoseResults);
+
+            // 初始化攝像頭
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 1280, height: 720, facingMode: 'user' } 
+                });
+                videoElement.srcObject = stream;
+                
+                await new Promise(resolve => {
+                    videoElement.onloadedmetadata = resolve;
+                });
+
+                // 設置 canvas 尺寸
+                canvasElement.width = videoElement.videoWidth;
+                canvasElement.height = videoElement.videoHeight;
+
+                // 開始姿態檢測
+                startPoseDetection();
+
+                // 隱藏載入畫面
+                document.getElementById('loadingScreen').classList.add('hidden');
+
+            } catch (error) {
+                console.error('攝像頭初始化失敗:', error);
+                showError('無法訪問攝像頭，請確保已授權相機權限。');
+                document.getElementById('loadingScreen').classList.add('hidden');
+            }
+
+            // 綁定事件
+            bindEvents();
+        }
+
+        // ==================== 事件綁定 ====================
+        function bindEvents() {
+            // 關卡選擇
+            document.querySelectorAll('.level-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    document.querySelectorAll('.level-card').forEach(c => c.classList.remove('selected'));
+                    card.classList.add('selected');
+                    currentLevel = parseInt(card.dataset.level);
+                });
+            });
+
+            // 開始遊戲
+            document.getElementById('startGameBtn').addEventListener('click', startGame);
+
+            // 返回
+            document.getElementById('backBtn').addEventListener('click', returnToMenu);
+
+            // 結算按鈕
+            document.getElementById('retryBtn').addEventListener('click', retryGame);
+            document.getElementById('menuBtn').addEventListener('click', returnToMenu);
+        }
+
+        // ==================== 姿態檢測 ====================
+        function startPoseDetection() {
+            const detect = async () => {
+                if (videoElement.readyState >= 2) {
+                    await pose.send({ image: videoElement });
+                }
+                requestAnimationFrame(detect);
+            };
+            detect();
+        }
+
+        function onPoseResults(results) {
+            // 清除畫布
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+            if (!results.poseLandmarks) {
+                // 沒有檢測到姿態
+                if (gameState === GameState.PLAYING || gameState === GameState.POSE_DETECTING) {
+                    showHint('請確保全身都在畫面中');
+                }
+                fullBodyDetected = false;
+                return;
+            }
+
+            fullBodyDetected = true;
+            hideHint();
+
+            // 繪製骨骼
+            drawSkeleton(results.poseLandmarks);
+
+            // 根據遊戲狀態處理
+            if (gameState === GameState.POSE_DETECTING) {
+                updatePoseIndicator(results.poseLandmarks);
+            } else if (gameState === GameState.PLAYING) {
+                detectJumpingJack(results.poseLandmarks);
+            }
+        }
+
+        // ==================== 骨骼繪製 ====================
+        function drawSkeleton(landmarks) {
+            // 連接線
+            const connections = [
+                [11, 12], // 肩膀
+                [11, 13], [13, 15], // 左臂
+                [12, 14], [14, 16], // 右臂
+                [11, 23], [12, 24], // 軀幹
+                [23, 24], // 臀部
+                [23, 25], [25, 27], // 左腿
+                [24, 26], [26, 28]  // 右腿
+            ];
+
+            canvasCtx.strokeStyle = '#00ff88';
+            canvasCtx.lineWidth = 4;
+
+            connections.forEach(([start, end]) => {
+                const startPt = landmarks[start];
+                const endPt = landmarks[end];
+                if (startPt && endPt) {
+                    canvasCtx.beginPath();
+                    canvasCtx.moveTo(startPt.x * canvasElement.width, startPt.y * canvasElement.height);
+                    canvasCtx.lineTo(endPt.x * canvasElement.width, endPt.y * canvasElement.height);
+                    canvasCtx.stroke();
+                }
+            });
+
+            // 關鍵點
+            const keyPoints = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
+            canvasCtx.fillStyle = '#00d9ff';
+            keyPoints.forEach(idx => {
+                const pt = landmarks[idx];
+                if (pt) {
+                    canvasCtx.beginPath();
+                    canvasCtx.arc(
+                        pt.x * canvasElement.width, 
+                        pt.y * canvasElement.height, 
+                        6, 0, 2 * Math.PI
+                    );
+                    canvasCtx.fill();
+                }
+            });
+        }
+
+        // ==================== 開合跳檢測 ====================
+        function detectJumpingJack(landmarks) {
+            const { armStatus, legStatus } = analyzePose(landmarks);
+
+            // 姿態狀態機
+            if (armStatus === 'open' && legStatus === 'open') {
+                poseFrameCount.open++;
+                poseFrameCount.idle = 0;
+                poseFrameCount.closed = 0;
+                
+                if (poseFrameCount.open >= POSE_CONFIRM_FRAMES) {
+                    poseState = PoseState.OPEN;
+                    updatePoseIndicatorDisplay('open');
+                }
+            } else if (armStatus === 'closed' && legStatus === 'closed') {
+                poseFrameCount.closed++;
+                poseFrameCount.idle = 0;
+                poseFrameCount.open = 0;
+                
+                if (poseFrameCount.closed >= POSE_CONFIRM_FRAMES) {
+                    // 從 OPEN 狀態回到 CLOSED，計數
+                    if (poseState === PoseState.OPEN) {
+                        score++;
+                        updateScore();
+                        showScorePopup();
+                    }
+                    poseState = PoseState.CLOSED;
+                    updatePoseIndicatorDisplay('closed');
+                }
+            } else {
+                // 中間狀態，重置計數
+                poseFrameCount.idle++;
+                if (poseFrameCount.idle >= POSE_CONFIRM_FRAMES * 2) {
+                    poseState = PoseState.IDLE;
+                    updatePoseIndicatorDisplay('idle');
+                    poseFrameCount.open = 0;
+                    poseFrameCount.closed = 0;
+                }
+            }
+        }
+
+        function analyzePose(landmarks) {
+            // 獲取關鍵點
+            const leftShoulder = landmarks[LANDMARKS.LEFT_SHOULDER];
+            const rightShoulder = landmarks[LANDMARKS.RIGHT_SHOULDER];
+            const leftWrist = landmarks[LANDMARKS.LEFT_WRIST];
+            const rightWrist = landmarks[LANDMARKS.RIGHT_WRIST];
+            const leftAnkle = landmarks[LANDMARKS.LEFT_ANKLE];
+            const rightAnkle = landmarks[LANDMARKS.RIGHT_ANKLE];
+
+            // 計算肩膀寬度（用於標準化）
+            const shoulderWidth = Math.abs(rightShoulder.x - leftShoulder.x);
+
+            // 計算手腕到肩膀的垂直距離
+            const leftArmHeight = leftShoulder.y - leftWrist.y;
+            const rightArmHeight = rightShoulder.y - rightWrist.y;
+
+            // 計算手腕到身體中線的距離
+            const bodyCenterX = (leftShoulder.x + rightShoulder.x) / 2;
+            const leftArmSpread = Math.abs(leftWrist.x - bodyCenterX);
+            const rightArmSpread = Math.abs(rightWrist.x - bodyCenterX);
+
+            // 計算腳踝之間的距離
+            const ankleDistance = Math.abs(rightAnkle.x - leftAnkle.x);
+
+            // 手臂判斷：手腕高於肩膀，且遠離身體
+            const armOpen = (leftArmHeight > 0.1 && rightArmHeight > 0.1) && // 手腕高於肩膀
+                           (leftArmSpread > shoulderWidth * 0.3 && rightArmSpread > shoulderWidth * 0.3); // 遠離身體
+
+            // 腿部判斷：腳踝距離大於肩膀寬度
+            const legOpen = ankleDistance > shoulderWidth * 1.2;
+
+            return {
+                armStatus: armOpen ? 'open' : 'closed',
+                legStatus: legOpen ? 'open' : 'closed'
+            };
+        }
+
+        // ==================== UI 更新 ====================
+        function updatePoseIndicator(landmarks) {
+            const { armStatus, legStatus } = analyzePose(landmarks);
+            const poseIcon = document.getElementById('poseIcon');
+            const poseText = document.getElementById('poseText');
+
+            if (armStatus === 'open' && legStatus === 'open') {
+                poseIcon.textContent = '🙆';
+                poseText.textContent = '姿勢正確！';
+                poseIcon.classList.add('active');
+                poseText.classList.add('active');
+            } else if (armStatus === 'closed' && legStatus === 'closed') {
+                poseIcon.textContent = '🧍';
+                poseText.textContent = '預備姿勢';
+                poseIcon.classList.remove('active');
+                poseText.classList.remove('active');
+            } else {
+                poseIcon.textContent = '🙌';
+                poseText.textContent = '請保持開合跳姿勢';
+                poseIcon.classList.remove('active');
+                poseText.classList.remove('active');
+            }
+        }
+
+        function updatePoseIndicatorDisplay(state) {
+            const poseIcon = document.getElementById('poseIcon');
+            const poseText = document.getElementById('poseText');
+
+            if (state === 'open') {
+                poseIcon.textContent = '🙆';
+                poseText.textContent = '開！';
+                poseIcon.classList.add('active');
+                poseText.classList.add('active');
+            } else if (state === 'closed') {
+                poseIcon.textContent = '🧍';
+                poseText.textContent = '合！';
+                poseIcon.classList.remove('active');
+                poseText.classList.remove('active');
+            } else {
+                poseIcon.textContent = '🙌';
+                poseText.textContent = '準備中...';
+                poseIcon.classList.remove('active');
+                poseText.classList.remove('active');
+            }
+        }
+
+        function updateScore() {
+            document.getElementById('scoreDisplay').textContent = score;
+            const target = LEVELS[currentLevel].target;
+            const progress = Math.min((score / target) * 100, 100);
+            document.getElementById('progressFill').style.width = `${progress}%`;
+        }
+
+        function showScorePopup() {
+            const popup = document.createElement('div');
+            popup.className = 'score-popup';
+            popup.textContent = '+1';
+            
+            // 隨機位置
+            popup.style.left = `${30 + Math.random() * 40}%`;
+            popup.style.top = `${30 + Math.random() * 20}%`;
+            
+            document.getElementById('cameraContainer').appendChild(popup);
+            
+            setTimeout(() => popup.remove(), 1000);
+        }
+
+        function showHint(message) {
+            let hint = document.getElementById('hintContainer').querySelector('.hint-message');
+            if (!hint) {
+                hint = document.createElement('div');
+                hint.className = 'hint-message';
+                document.getElementById('hintContainer').appendChild(hint);
+            }
+            hint.textContent = message;
+        }
+
+        function hideHint() {
+            const hint = document.getElementById('hintContainer').querySelector('.hint-message');
+            if (hint) hint.remove();
+        }
+
+        function showError(message) {
+            const container = document.getElementById('errorContainer');
+            container.innerHTML = `<div class="error-message">${message}</div>`;
+        }
+
+        // ==================== 遊戲控制 ====================
+        function startGame() {
+            // 切換畫面
+            document.getElementById('startScreen').style.display = 'none';
+            document.getElementById('resultScreen').classList.remove('active');
+            document.getElementById('gameScreen').classList.add('active');
+
+            // 重置遊戲狀態
+            score = 0;
+            timeLeft = LEVELS[currentLevel].time;
+            poseState = PoseState.IDLE;
+            poseFrameCount = { idle: 0, open: 0, closed: 0 };
+            gameState = GameState.POSE_DETECTING;
+
+            // 更新 UI
+            document.getElementById('levelDisplay').textContent = currentLevel;
+            document.getElementById('timerDisplay').textContent = timeLeft;
+            document.getElementById('scoreDisplay').textContent = '0';
+            document.getElementById('targetDisplay').textContent = LEVELS[currentLevel].target;
+            document.getElementById('progressFill').style.width = '0%';
+            updatePoseIndicatorDisplay('idle');
+
+            // 3秒倒數後開始遊戲
+            let countdown = 3;
+            showHint(`準備開始！倒數 ${countdown} 秒...`);
+
+            const countdownInterval = setInterval(() => {
+                countdown--;
+                if (countdown > 0) {
+                    showHint(`準備開始！倒數 ${countdown} 秒...`);
+                } else {
+                    clearInterval(countdownInterval);
+                    hideHint();
+                    gameState = GameState.PLAYING;
+                    startTimer();
+                }
+            }, 1000);
+        }
+
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                document.getElementById('timerDisplay').textContent = timeLeft;
+
+                if (timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        function endGame() {
+            clearInterval(timerInterval);
+            gameState = GameState.ENDED;
+
+            const target = LEVELS[currentLevel].target;
+            const success = score >= target;
+
+            // 顯示結算畫面
+            document.getElementById('gameScreen').classList.remove('active');
+            document.getElementById('resultScreen').classList.add('active');
+
+            document.getElementById('resultIcon').textContent = success ? '🎉' : '😢';
+            document.getElementById('resultTitle').textContent = success ? '恭喜通關！' : '再接再厲！';
+            document.getElementById('resultTitle').className = `result-title ${success ? 'success' : 'fail'}`;
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('finalTarget').textContent = target;
+            document.getElementById('finalTime').textContent = timeLeft;
+
+            document.getElementById('retryBtn').textContent = currentLevel < 3 ? '再試一次' : '重新挑戰';
+        }
+
+        function retryGame() {
+            document.getElementById('resultScreen').classList.remove('active');
+            document.getElementById('startScreen').style.display = 'block';
+        }
+
+        function returnToMenu() {
+            clearInterval(timerInterval);
+            gameState = GameState.POSE_DETECTING;
+            
+            document.getElementById('gameScreen').classList.remove('active');
+            document.getElementById('resultScreen').classList.remove('active');
+            document.getElementById('startScreen').style.display = 'block';
+
+            // 重置姿態
+            poseState = PoseState.IDLE;
+            poseFrameCount = { idle: 0, open: 0, closed: 0 };
+        }
+
+        // ==================== 啟動 ====================
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
