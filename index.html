@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>開合跳挑戰 · 體感訓練 (僅手部)</title>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      overflow: hidden;
+      background: #000;
+      width: 100vw; height: 100vh;
+      color: #e2e8f0;
+    }
+
+    #video-bg {
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+      z-index: 0;
+    }
+    #game-canvas {
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 1; pointer-events: none;
+    }
+
+    /* ── HUD ── */
+    #hud {
+      position: fixed; top: 0; left: 0; right: 0;
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 28px;
+      background: linear-gradient(180deg, rgba(0,0,0,0.80) 0%, transparent 100%);
+      pointer-events: none;
+    }
+    .hud-block { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+    .hud-label { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,0.4); }
+    .hud-value { font-size: 26px; font-weight: 700; color: #fff; line-height: 1; }
+
+    #hud-count {
+      font-size: 72px; font-weight: 900; line-height: 1;
+      background: linear-gradient(135deg, #6ee7b7, #38bdf8);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      filter: drop-shadow(0 0 20px rgba(56,189,248,0.7));
+    }
+    #hud-timer {
+      font-size: 32px; font-weight: 700; color: #67e8f9;
+      text-shadow: 0 0 16px rgba(103,232,249,0.8);
+    }
+    #hud-timer.urgent { color: #f87171; text-shadow: 0 0 16px rgba(248,113,113,0.9); animation: urgentPulse 0.5s infinite alternate; }
+    @keyframes urgentPulse { from { opacity:1; } to { opacity:0.4; } }
+
+    #hud-goal-badge {
+      background: linear-gradient(135deg, rgba(56,189,248,0.28), rgba(16,185,129,0.22));
+      border: 1px solid rgba(56,189,248,0.5);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 14px; font-weight: 700;
+      color: #7dd3fc;
+      letter-spacing: 1px;
+      backdrop-filter: blur(8px);
+    }
+
+    /* ── side panel ── */
+    #side-panel {
+      position: fixed; right: 20px; top: 50%;
+      transform: translateY(-50%);
+      z-index: 10;
+      width: 200px;
+      background: rgba(0,0,0,0.65);
+      border: 1px solid rgba(56,189,248,0.35);
+      border-radius: 20px;
+      padding: 18px 16px;
+      backdrop-filter: blur(12px);
+      display: flex; flex-direction: column; align-items: center; gap: 12px;
+    }
+    #side-panel h3 { font-size: 13px; letter-spacing: 2px; color: rgba(125,211,252,0.7); text-transform: uppercase; }
+    #side-canvas { width: 160px; height: 200px; }
+    #phase-label { font-size: 15px; font-weight: 700; color: #7dd3fc; letter-spacing: 1px; }
+
+    .meter-wrap { width: 100%; }
+    .meter-title { font-size: 11px; color: rgba(255,255,255,0.4); margin-bottom: 4px; }
+    .meter-bar-bg { background: rgba(255,255,255,0.1); border-radius: 6px; height: 10px; overflow: hidden; }
+    .meter-bar { height: 100%; border-radius: 6px; width: 0%; transition: width 0.12s, background 0.3s; }
+
+    /* ── overlay screens ── */
+    .screen {
+      position: fixed; inset: 0; z-index: 20;
+      display: flex; flex-direction: column;
+      justify-content: center; align-items: center; gap: 20px;
+      background: rgba(0,0,0,0.85);
+      backdrop-filter: blur(6px);
+    }
+    .screen.hidden { display: none; }
+
+    .screen-title {
+      font-size: 52px; font-weight: 900;
+      background: linear-gradient(135deg, #6ee7b7, #38bdf8);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      filter: drop-shadow(0 0 24px rgba(56,189,248,0.6));
+      text-align: center;
+    }
+    .screen-sub { font-size: 18px; color: rgba(255,255,255,0.68); text-align: center; max-width: 520px; line-height: 1.75; }
+
+    /* tips diagram on idle */
+    #pose-tips {
+      display: flex; gap: 32px; align-items: flex-start;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(56,189,248,0.25);
+      border-radius: 16px;
+      padding: 16px 28px;
+    }
+    .tip-item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .tip-item canvas { width: 80px; height: 120px; }
+    .tip-label { font-size: 12px; color: rgba(255,255,255,0.5); text-align: center; }
+
+    .btn {
+      padding: 14px 42px; border: none; border-radius: 40px;
+      font-size: 18px; font-weight: 700; cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .btn:hover { transform: scale(1.06); }
+    .btn-primary {
+      background: linear-gradient(135deg, #0ea5e9, #06b6d4);
+      color: #fff; box-shadow: 0 6px 30px rgba(14,165,233,0.45);
+    }
+    .btn-secondary {
+      background: rgba(255,255,255,0.1); color: #fff;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+
+    /* level grid */
+    #level-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 88px);
+      gap: 10px;
+    }
+    .level-card {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(56,189,248,0.3);
+      border-radius: 14px; padding: 10px 6px; text-align: center;
+      cursor: pointer;
+      transition: transform 0.15s, background 0.15s, border-color 0.15s;
+    }
+    .level-card:hover { transform: scale(1.09); background: rgba(56,189,248,0.2); border-color: rgba(56,189,248,0.7); }
+    .level-card .lc-num { font-size: 20px; font-weight: 900; }
+    .level-card .lc-goal { font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+    .level-card .lc-time { font-size: 11px; color: #67e8f9; }
+
+    /* finish */
+    #finish-count { font-size: 96px; font-weight: 900; line-height: 1;
+      background: linear-gradient(135deg,#6ee7b7,#38bdf8);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      filter: drop-shadow(0 0 32px rgba(56,189,248,0.8)); }
+    #finish-grade {
+      font-size: 26px; font-weight: 700; padding: 8px 32px; border-radius: 30px;
+    }
+    .grade-s { background: linear-gradient(135deg,#fde68a,#f59e0b); color:#000; }
+    .grade-a { background: linear-gradient(135deg,#86efac,#22c55e); color:#000; }
+    .grade-b { background: linear-gradient(135deg,#93c5fd,#3b82f6); color:#fff; }
+    .grade-c { background: rgba(255,255,255,0.18); color:#fff; }
+
+    /* countdown */
+    #countdown-overlay {
+      position: fixed; inset: 0; z-index: 15;
+      display: flex; justify-content: center; align-items: center;
+      pointer-events: none;
+    }
+    #countdown-num {
+      font-size: 200px; font-weight: 900; color: #67e8f9;
+      filter: drop-shadow(0 0 40px rgba(103,232,249,0.9)); opacity: 0;
+    }
+    @keyframes cdPop { 0%{opacity:1;transform:scale(1.5);} 80%{opacity:1;transform:scale(0.9);} 100%{opacity:0;transform:scale(0.8);} }
+
+    /* rep flash */
+    #rep-flash {
+      position: fixed; top: 42%; left: 50%;
+      transform: translate(-50%,-50%);
+      font-size: 120px; font-weight: 900;
+      background: linear-gradient(135deg,#6ee7b7,#38bdf8);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      pointer-events: none; z-index: 12; opacity: 0;
+      filter: drop-shadow(0 0 40px rgba(56,189,248,0.9));
+    }
+    @keyframes repPop { 0%{opacity:1;transform:translate(-50%,-50%) scale(1.5);} 80%{opacity:0.8;transform:translate(-50%,-50%) scale(0.95);} 100%{opacity:0;transform:translate(-50%,-50%) scale(0.8);} }
+
+    #back-link {
+      position: fixed; bottom: 18px; left: 24px; z-index: 30;
+      color: rgba(255,255,255,0.4); text-decoration: none; font-size: 13px;
+      transition: color 0.2s;
+    }
+    #back-link:hover { color: #fff; }
+  </style>
+</head>
+<body>
+
+<video id="video-bg" playsinline autoplay muted></video>
+<canvas id="game-canvas"></canvas>
+
+<div id="hud">
+  <div class="hud-block">
+    <span class="hud-label">Level</span>
+    <span class="hud-value" id="hud-level">1</span>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+    <div id="hud-count">0</div>
+    <div id="hud-goal-badge">目標：20 下</div>
+  </div>
+  <div class="hud-block">
+    <span class="hud-label">Time</span>
+    <span id="hud-timer">60</span>
+  </div>
+</div>
+
+<div id="side-panel">
+  <h3>即時狀態</h3>
+  <canvas id="side-canvas" width="160" height="200"></canvas>
+  <div id="phase-label">等待偵測</div>
+  <div class="meter-wrap">
+    <div class="meter-title" id="arm-angle-label">手臂張開度：—</div>
+    <div class="meter-bar-bg"><div class="meter-bar" id="arm-bar"></div></div>
+  </div>
+  </div>
+
+<div id="rep-flash">+1</div>
+
+<div id="countdown-overlay"><div id="countdown-num"></div></div>
+
+<div id="idle-screen" class="screen">
+  <div class="screen-title">開合跳挑戰</div>
+  <div class="screen-sub">
+    站在鏡頭前，讓攝像頭看到你的<strong>上半身</strong>（包含雙手）<br>
+    雙手張開 = 開；雙手合 = 合，計一次
+  </div>
+  <div id="pose-tips">
+    <div class="tip-item">
+      <canvas id="tip-closed" width="80" height="120"></canvas>
+      <div class="tip-label">合（起始）</div>
+    </div>
+    <div class="tip-item">
+      <canvas id="tip-open" width="80" height="120"></canvas>
+      <div class="tip-label">開（張開）</div>
+    </div>
+  </div>
+  <div style="color:rgba(255,255,255,0.45);font-size:13px;letter-spacing:1px;margin-top:4px;">選擇關卡</div>
+  <div id="level-grid"></div>
+</div>
+
+<div id="finish-screen" class="screen hidden">
+  <div class="screen-title" id="finish-title">完成！</div>
+  <div id="finish-count">0</div>
+  <div id="finish-grade" class="grade-s">S 級</div>
+  <div class="screen-sub" id="finish-msg"></div>
+  <div style="display:flex;gap:14px;">
+    <button class="btn btn-primary" id="btn-retry">再試一次</button>
+    <button class="btn btn-secondary" id="btn-menu">選關</button>
+  </div>
+</div>
+
+<a href="index.html" id="back-link">← 返回遊戲大廳</a>
+
+<script>
+// ══════════════════════════════════════════
+//  LEVELS
+// ══════════════════════════════════════════
+const LEVELS = [
+  { id:1, goal:20,  time:60,  label:'入門',   color:'#86efac' },
+  { id:2, goal:30,  time:60,  label:'初級',   color:'#6ee7b7' },
+  { id:3, goal:40,  time:60,  label:'中級',   color:'#67e8f9' },
+  { id:4, goal:30,  time:45,  label:'中高級', color:'#38bdf8' },
+  { id:5, goal:50,  time:60,  label:'高強度', color:'#fde68a' },
+  { id:6, goal:40,  time:45,  label:'進階',   color:'#fcd34d' },
+  { id:7, goal:50,  time:50,  label:'高手',   color:'#f97316' },
+  { id:8, goal:60,  time:60,  label:'精英',   color:'#ef4444' },
+];
+
+// ══════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════
+let gameState = 'idle';
+let currentLevel = LEVELS[0];
+let repCount = 0;
+let timeLeft = 60;
+let timerInterval = null;
+// phase: 'closed' | 'open'
+let jackPhase = 'closed';
+let lastLandmarks = null;
+
+// wrist trail
+const wristTrail = { left: [], right: [] };
+const TRAIL_LEN = 20;
+
+// ══════════════════════════════════════════
+//  CANVAS
+// ══════════════════════════════════════════
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+const sideCanvas = document.getElementById('side-canvas');
+const sideCtx = sideCanvas.getContext('2d');
+
+function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// ══════════════════════════════════════════
+//  AUDIO
+// ══════════════════════════════════════════
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playTone(freq, type, dur, vol = 0.28, delay = 0) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, audioCtx.currentTime + delay);
+  gain.gain.setValueAtTime(0, audioCtx.currentTime + delay);
+  gain.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + delay + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + delay + dur);
+  osc.start(audioCtx.currentTime + delay);
+  osc.stop(audioCtx.currentTime + delay + dur + 0.01);
+}
+
+function sfxOpen()  { playTone(440, 'sine', 0.07, 0.22); }
+function sfxRep()   { playTone(660, 'sine', 0.07, 0.3); playTone(990, 'sine', 0.1, 0.24, 0.06); }
+function sfxCountdown(n) { playTone(n === 0 ? 880 : 440, 'square', 0.18, 0.22); }
+function sfxUrgent()  { playTone(660, 'square', 0.07, 0.18); }
+function sfxFinish() {
+  [523, 659, 784, 1047].forEach((f, i) => playTone(f, 'sine', 0.25, 0.32, i * 0.12));
+}
+
+// ══════════════════════════════════════════
+//  DRAW IDLE TIP FIGURES (已移除腿部張開示意)
+// ══════════════════════════════════════════
+function drawTipFigure(canvasEl, open) {
+  const c = canvasEl.getContext('2d');
+  const W = 80, H = 120;
+  c.clearRect(0, 0, W, H);
+  c.strokeStyle = open ? '#6ee7b7' : '#38bdf8';
+  c.lineWidth = 3;
+  c.lineCap = 'round';
+
+  const cx = W / 2, headY = 12;
+
+  // head
+  c.beginPath(); c.arc(cx, headY, 8, 0, Math.PI * 2);
+  c.fillStyle = open ? '#6ee7b7' : '#38bdf8';
+  c.fill();
+
+  // torso
+  const torsoTop = headY + 8, torsoBot = torsoTop + 30;
+  c.beginPath(); c.moveTo(cx, torsoTop); c.lineTo(cx, torsoBot); c.stroke();
+
+  // arms
+  if (open) {
+    c.beginPath(); c.moveTo(cx, torsoTop + 8); c.lineTo(cx - 28, torsoTop - 4); c.stroke();
+    c.beginPath(); c.moveTo(cx, torsoTop + 8); c.lineTo(cx + 28, torsoTop - 4); c.stroke();
+  } else {
+    c.beginPath(); c.moveTo(cx, torsoTop + 8); c.lineTo(cx - 10, torsoTop + 22); c.stroke();
+    c.beginPath(); c.moveTo(cx, torsoTop + 8); c.lineTo(cx + 10, torsoTop + 22); c.stroke();
+  }
+
+  // legs (固定合併，不再顯示開腳)
+  c.beginPath(); c.moveTo(cx, torsoBot); c.lineTo(cx - 8, torsoBot + 36); c.stroke();
+  c.beginPath(); c.moveTo(cx, torsoBot); c.lineTo(cx + 8, torsoBot + 36); c.stroke();
+}
+
+drawTipFigure(document.getElementById('tip-closed'), false);
+drawTipFigure(document.getElementById('tip-open'), true);
+
+// ══════════════════════════════════════════
+//  BUILD LEVEL GRID
+// ══════════════════════════════════════════
+(function buildGrid() {
+  const grid = document.getElementById('level-grid');
+  LEVELS.forEach(lv => {
+    const card = document.createElement('div');
+    card.className = 'level-card';
+    card.innerHTML = `<div class="lc-num" style="color:${lv.color}">Lv${lv.id}</div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.4)">${lv.label}</div>
+      <div class="lc-goal">${lv.goal} 下</div>
+      <div class="lc-time">${lv.time}s</div>`;
+    card.addEventListener('click', () => startCountdown(lv));
+    grid.appendChild(card);
+  });
+})();
+
+// ══════════════════════════════════════════
+//  COUNTDOWN → START
+// ══════════════════════════════════════════
+function startCountdown(lv) {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  currentLevel = lv;
+  document.getElementById('idle-screen').classList.add('hidden');
+  gameState = 'countdown';
+  const overlay = document.getElementById('countdown-num');
+  let n = 3;
+  function tick() {
+    overlay.style.animation = 'none';
+    overlay.textContent = n === 0 ? 'GO!' : n;
+    overlay.offsetHeight;
+    overlay.style.animation = 'cdPop 0.9s ease forwards';
+    sfxCountdown(n);
+    if (n === 0) setTimeout(() => { overlay.style.opacity = '0'; startGame(); }, 700);
+    else { n--; setTimeout(tick, 900); }
+  }
+  tick();
+}
+
+function startGame() {
+  gameState = 'playing';
+  repCount = 0;
+  timeLeft = currentLevel.time;
+  jackPhase = 'closed';
+  wristTrail.left.length = 0;
+  wristTrail.right.length = 0;
+  updateHUD();
+  document.getElementById('hud-goal-badge').textContent = `目標：${currentLevel.goal} 下`;
+  document.getElementById('hud-level').textContent = currentLevel.id;
+
+  timerInterval = setInterval(() => {
+    if (gameState !== 'playing') return;
+    timeLeft--;
+    updateTimer();
+    if (timeLeft <= 5 && timeLeft > 0) sfxUrgent();
+    if (timeLeft <= 0) endGame();
+  }, 1000);
+}
+
+function updateHUD() { document.getElementById('hud-count').textContent = repCount; }
+
+function updateTimer() {
+  const el = document.getElementById('hud-timer');
+  el.textContent = timeLeft;
+  el.classList.toggle('urgent', timeLeft <= 10);
+}
+
+// ══════════════════════════════════════════
+//  END GAME
+// ══════════════════════════════════════════
+function endGame() {
+  clearInterval(timerInterval);
+  gameState = 'finish';
+  sfxFinish();
+
+  const goal = currentLevel.goal;
+  const ratio = repCount / goal;
+  let grade, gradeClass, msg;
+  if (ratio >= 1.2)      { grade = 'S+ 超越目標！'; gradeClass = 'grade-s'; msg = `目標 ${goal} 下，你完成了 ${repCount} 下，超神！`; }
+  else if (ratio >= 1.0) { grade = 'S 完美達標';   gradeClass = 'grade-s'; msg = `恭喜完成目標 ${goal} 下！`; }
+  else if (ratio >= 0.8) { grade = 'A 優秀';       gradeClass = 'grade-a'; msg = `完成 ${repCount} 下，差一點就達標！`; }
+  else if (ratio >= 0.6) { grade = 'B 良好';       gradeClass = 'grade-b'; msg = `完成 ${repCount} 下，繼續練習！`; }
+  else                   { grade = 'C 繼續加油';   gradeClass = 'grade-c'; msg = `完成 ${repCount} 下，目標 ${goal} 下，再試一次！`; }
+
+  document.getElementById('finish-count').textContent = repCount;
+  const gradeEl = document.getElementById('finish-grade');
+  gradeEl.textContent = grade;
+  gradeEl.className = `grade ${gradeClass}`;
+  document.getElementById('finish-title').textContent = repCount >= goal ? '🎉 挑戰成功！' : '⏱ 時間到！';
+  document.getElementById('finish-msg').textContent = msg;
+
+  if (repCount >= goal) spawnConfetti();
+  document.getElementById('finish-screen').classList.remove('hidden');
+}
+
+document.getElementById('btn-retry').addEventListener('click', () => {
+  document.getElementById('finish-screen').classList.add('hidden');
+  startCountdown(currentLevel);
+});
+document.getElementById('btn-menu').addEventListener('click', () => {
+  document.getElementById('finish-screen').classList.add('hidden');
+  gameState = 'idle';
+  document.getElementById('idle-screen').classList.remove('hidden');
+});
+
+// ══════════════════════════════════════════
+//  CONFETTI
+// ══════════════════════════════════════════
+let confettiParticles = [];
+function spawnConfetti() {
+  confettiParticles = [];
+  const colors = ['#6ee7b7','#38bdf8','#67e8f9','#fde68a','#a78bfa','#f9a8d4'];
+  for (let i = 0; i < 130; i++) {
+    confettiParticles.push({
+      x: Math.random() * canvas.width,
+      y: -20,
+      vx: (Math.random() - 0.5) * 5,
+      vy: 2 + Math.random() * 5,
+      rot: Math.random() * Math.PI * 2,
+      vrot: (Math.random() - 0.5) * 0.25,
+      w: 7 + Math.random() * 9,
+      h: 4 + Math.random() * 6,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      life: 1,
+    });
+  }
+}
+function updateConfetti() {
+  confettiParticles.forEach(p => {
+    p.x += p.vx; p.y += p.vy; p.rot += p.vrot; p.vy += 0.09;
+    if (p.y > canvas.height + 30) p.life = 0;
+  });
+  confettiParticles = confettiParticles.filter(p => p.life > 0);
+}
+function drawConfetti() {
+  confettiParticles.forEach(p => {
+    ctx.save();
+    ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+    ctx.restore();
+  });
+}
+
+// ══════════════════════════════════════════
+//  ANGLE UTILS
+// ══════════════════════════════════════════
+function dist2D(a, b) {
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+}
+
+// 僅保留手部比例參數
+const OPEN_ARM_RATIO = 1.8;  // wrists at least 1.8x shoulder width apart
+const CLOSE_ARM_RATIO = 0.8;
+
+function computeSpread(landmarks) {
+  // shoulders: 11, 12  wrists: 15, 16
+  const shoulderDist = dist2D(landmarks[11], landmarks[12]);
+  const wristDist    = dist2D(landmarks[15], landmarks[16]);
+
+  const armRatio = shoulderDist > 0.01 ? wristDist / shoulderDist : 0;
+  return { armRatio };
+}
+
+// ══════════════════════════════════════════
+//  POSE PROCESSING
+// ══════════════════════════════════════════
+function processPose(landmarks) {
+  if (!landmarks || landmarks.length < 33) return;
+
+  const minVis = 0.4;
+  // 移除腿部關鍵點，僅檢查肩膀(11,12)與手腕(15,16)
+  const keyPoints = [11, 12, 15, 16];
+  const allVisible = keyPoints.every(i => (landmarks[i].visibility || 0) >= minVis);
+
+  if (!allVisible) {
+    updatePhaseLabel('偵測中…請讓上半身入鏡', '#999');
+    updateMeters(0);
+    drawSideStick(landmarks, false);
+    return;
+  }
+
+  const { armRatio } = computeSpread(landmarks);
+
+  // bar: 0=closed, 1=open; clamp 0-1 based on ratio 0.5–2.5
+  const armBarRatio = Math.max(0, Math.min(1, (armRatio - 0.5) / 2.0));
+  updateMeters(armBarRatio);
+
+  document.getElementById('arm-angle-label').textContent = `手臂展開比：${armRatio.toFixed(2)}`;
+
+  // 僅根據手部展開比率判斷是否為「開」或「合」
+  const isOpen   = armRatio > OPEN_ARM_RATIO;
+  const isClosed = armRatio < CLOSE_ARM_RATIO;
+
+  if (gameState === 'playing') {
+    if (jackPhase === 'closed' && isOpen) {
+      jackPhase = 'open';
+      sfxOpen();
+      updatePhaseLabel('⭕ 開！', '#6ee7b7');
+    } else if (jackPhase === 'open' && isClosed) {
+      jackPhase = 'closed';
+      repCount++;
+      updateHUD();
+      sfxRep();
+      showRepFlash();
+      updatePhaseLabel('✅ 合！', '#38bdf8');
+      if (repCount >= currentLevel.goal) endGame();
+    } else if (jackPhase === 'closed') {
+      updatePhaseLabel('➡ 跳開！', '#fde68a');
+    } else {
+      updatePhaseLabel('➡ 跳合！', '#6ee7b7');
+    }
+  }
+
+  // wrist trail
+  const W = canvas.width, H = canvas.height;
+  const lw = landmarks[15], rw = landmarks[16];
+  wristTrail.left.push({ x: (1 - lw.x) * W, y: lw.y * H });
+  wristTrail.right.push({ x: (1 - rw.x) * W, y: rw.y * H });
+  if (wristTrail.left.length  > TRAIL_LEN) wristTrail.left.shift();
+  if (wristTrail.right.length > TRAIL_LEN) wristTrail.right.shift();
+
+  drawSideStick(landmarks, isOpen);
+}
+
+function updatePhaseLabel(text, color) {
+  const el = document.getElementById('phase-label');
+  el.textContent = text; el.style.color = color;
+}
+
+// 移除腿部的更新邏輯
+function updateMeters(arm) {
+  const aBar = document.getElementById('arm-bar');
+  const color = (r) => r > 0.6 ? '#6ee7b7' : r > 0.35 ? '#fde68a' : '#f87171';
+  aBar.style.width = `${Math.round(arm * 100)}%`;
+  aBar.style.background = color(arm);
+}
+
+function showRepFlash() {
+  const el = document.getElementById('rep-flash');
+  el.style.animation = 'none'; el.offsetHeight;
+  el.style.animation = 'repPop 0.55s ease forwards';
+}
+
+// ══════════════════════════════════════════
+//  SIDE STICK FIGURE
+// ══════════════════════════════════════════
+function drawSideStick(landmarks, isOpen) {
+  const W = 160, H = 200;
+  sideCtx.clearRect(0, 0, W, H);
+  sideCtx.fillStyle = 'rgba(0,0,0,0.4)';
+  sideCtx.roundRect(0, 0, W, H, 12);
+  sideCtx.fill();
+  if (!landmarks || landmarks.length < 33) return;
+
+  function proj(lm) { return { x: (1 - lm.x) * W, y: lm.y * H }; }
+
+  const color = isOpen ? '#6ee7b7' : '#38bdf8';
+  const pairs = [
+    [11,12],[11,13],[13,15],[12,14],[14,16],
+    [11,23],[12,24],[23,24],
+    [23,25],[25,27],[24,26],[26,28],
+  ];
+  sideCtx.strokeStyle = color;
+  sideCtx.lineWidth = 3; sideCtx.lineCap = 'round';
+  pairs.forEach(([a, b]) => {
+    const pa = proj(landmarks[a]), pb = proj(landmarks[b]);
+    sideCtx.beginPath(); sideCtx.moveTo(pa.x, pa.y); sideCtx.lineTo(pb.x, pb.y); sideCtx.stroke();
+  });
+  const nose = proj(landmarks[0]);
+  sideCtx.beginPath(); sideCtx.arc(nose.x, nose.y, 7, 0, Math.PI * 2);
+  sideCtx.fillStyle = color; sideCtx.fill();
+}
+
+// ══════════════════════════════════════════
+//  MAIN SKELETON + WRIST TRAIL
+// ══════════════════════════════════════════
+const POSE_CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,7],[0,4],[4,5],[5,6],[6,8],
+  [9,10],[11,12],[11,13],[13,15],[15,17],[17,19],[19,15],[15,21],
+  [12,14],[14,16],[16,18],[18,20],[20,16],[16,22],
+  [11,23],[12,24],[23,24],
+  [23,25],[25,27],[27,29],[29,31],[31,27],
+  [24,26],[26,28],[28,30],[30,32],[32,28],
+];
+
+function drawSkeleton(landmarks) {
+  if (!landmarks || gameState === 'idle') return;
+  const W = canvas.width, H = canvas.height;
+  function toC(lm) { return { x: (1 - lm.x) * W, y: lm.y * H }; }
+
+  const { armRatio } = (() => {
+    if (!landmarks || landmarks.length < 33) return { armRatio: 0 };
+    return computeSpread(landmarks);
+  })();
+  // 全身骨架顏色判斷也只依賴手臂
+  const isO = armRatio > OPEN_ARM_RATIO;
+  const color = isO ? '#6ee7b7' : '#38bdf8';
+
+  POSE_CONNECTIONS.forEach(([a, b]) => {
+    if (a >= landmarks.length || b >= landmarks.length) return;
+    const visA = landmarks[a].visibility || 0, visB = landmarks[b].visibility || 0;
+    if (visA < 0.3 && visB < 0.3) return;
+    const pa = toC(landmarks[a]), pb = toC(landmarks[b]);
+    ctx.save();
+    ctx.globalAlpha = Math.min(visA, visB) * 0.8 + 0.1;
+    ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.shadowColor = color; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+    ctx.restore();
+  });
+
+  [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28].forEach(i => {
+    if (i >= landmarks.length) return;
+    const vis = landmarks[i].visibility || 0;
+    if (vis < 0.3) return;
+    const p = toC(landmarks[i]);
+    ctx.save();
+    ctx.globalAlpha = vis * 0.9;
+    ctx.beginPath(); ctx.arc(p.x, p.y, i === 0 ? 8 : 5, 0, Math.PI * 2);
+    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 12;
+    ctx.fill(); ctx.restore();
+  });
+}
+
+function drawWristTrails() {
+  ['left', 'right'].forEach((side, si) => {
+    const trail = wristTrail[side];
+    if (trail.length < 2) return;
+    for (let i = 1; i < trail.length; i++) {
+      const t = i / trail.length;
+      ctx.save();
+      ctx.globalAlpha = t * 0.7;
+      ctx.strokeStyle = si === 0 ? '#6ee7b7' : '#38bdf8';
+      ctx.lineWidth = 3 * t + 1;
+      ctx.lineCap = 'round';
+      ctx.shadowColor = si === 0 ? '#6ee7b7' : '#38bdf8';
+      ctx.shadowBlur = 10 * t;
+      ctx.beginPath();
+      ctx.moveTo(trail[i-1].x, trail[i-1].y);
+      ctx.lineTo(trail[i].x, trail[i].y);
+      ctx.stroke();
+      ctx.restore();
+    }
+  });
+}
+
+// ══════════════════════════════════════════
+//  RENDER LOOP
+// ══════════════════════════════════════════
+function renderLoop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (lastLandmarks) {
+    drawSkeleton(lastLandmarks);
+    drawWristTrails();
+  }
+  drawConfetti();
+  updateConfetti();
+  requestAnimationFrame(renderLoop);
+}
+renderLoop();
+
+// ══════════════════════════════════════════
+//  MEDIAPIPE POSE
+// ══════════════════════════════════════════
+const videoEl = document.getElementById('video-bg');
+
+const pose = new Pose({
+  locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
+});
+pose.setOptions({
+  modelComplexity: 1,
+  smoothLandmarks: true,
+  enableSegmentation: false,
+  smoothSegmentation: false,
+  minDetectionConfidence: 0.55,
+  minTrackingConfidence: 0.55,
+});
+pose.onResults(results => {
+  lastLandmarks = results.poseLandmarks || null;
+  if (lastLandmarks) processPose(lastLandmarks);
+  else drawSideStick(null, false);
+});
+
+const camera = new Camera(videoEl, {
+  onFrame: async () => { await pose.send({ image: videoEl }); },
+  width: 1280,
+  height: 720,
+});
+camera.start().catch(err => alert('無法開啟攝像頭：' + err.message));
+</script>
+</body>
+</html>
